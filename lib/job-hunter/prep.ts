@@ -113,8 +113,8 @@ export interface PrepPlan {
 
 const CLAIM_PATTERN = /\d/;
 
-/** Lines carrying document markup take the cleaned-prose emission path. */
-const MARKUP_HINT = /[\\{}]/;
+/** Lines carrying document markup (TeX commands or HTML tags) take the cleaned-prose emission path. */
+const MARKUP_HINT = /[\\{}<>]/;
 
 const STAGE_BANKS: Record<string, { likely: string[]; ask: string[] }> = {
 	"recruiter-screen": {

@@ -215,7 +215,7 @@ describe("planSearch with the Indeed Site", () => {
 	};
 	const NOW = new Date("2026-10-03T12:00:00Z");
 
-	it("returns indeed-portal candidates through limit, paging, and caller dedupe", async () => {
+	it("returns indeed-portal candidates through limit and paging", async () => {
 		const first = await planSearch({
 			profile: PROFILE,
 			filters: { keywords: "ML Engineer", location: "Berlin, Germany", limit: 10 },
@@ -235,25 +235,6 @@ describe("planSearch with the Indeed Site", () => {
 		assert.equal(first.candidates[0].postedDate, "2026-09-25");
 		assert.equal(first.candidates[0].dateUnknown, false);
 		assert.equal(first.errors.length, 0);
-
-		const key = first.candidates[0].key;
-		const second = await planSearch({
-			profile: PROFILE,
-			filters: { keywords: "ML Engineer", location: "Berlin, Germany", limit: 10 },
-			now: NOW,
-			scraperAdapters: ["indeed"],
-			scraperFetch: async () => [{
-				title: "ML Engineer",
-				company: "Acme",
-				url: "https://www.indeed.com/viewjob?jk=abc123",
-				description: "Python ML Engineer with a long detailed description of stack and team.",
-				postedDate: "2026-09-25",
-				portal: "indeed",
-			}],
-			seenKeys: [key],
-		});
-		assert.deepEqual(second.candidates, []);
-		assert.equal(second.seenSkipped, 1);
 	});
 });
 

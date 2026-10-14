@@ -45,7 +45,7 @@ describe("resumeversion verification (ticket 03)", () => {
 		const verification = buildResumeVerification({
 			coverage: [],
 			draftDrift: ["unverified employer claim"],
-			latexSafetyPassed: false,
+			renderSafetyPassed: false,
 		});
 		assert.deepEqual(verification, { compiles: false, keywordOverlap: 0, noNewEmployers: false });
 	});

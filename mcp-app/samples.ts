@@ -278,8 +278,6 @@ export const SAMPLE_CALLS: Record<(typeof SAMPLE_TOOLS)[number], SampleCall> = {
 				},
 			],
 			staleCount: 0,
-			seenSkipped: 1,
-			appliedSkipped: 0,
 			queriesRun: ["backend Berlin"],
 			nextCursor: null,
 			notes: [],

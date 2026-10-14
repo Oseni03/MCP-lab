@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import { planInterviewPrep } from "@/lib/job-hunter/prep.ts";
-import { stripTexToProse } from "@/lib/job-hunter/verify.ts";
+import { stripHtmlToProse } from "@/lib/job-hunter/verify.ts";
 
 const PROFILE = {
 	name: "Test Candidate",
@@ -40,26 +40,24 @@ describe("prep empty-slug hard error", () => {
 	});
 });
 
-describe("prep TeX-aware probeable claims", () => {
-	const TEX_CV = [
-		"\\cventry{2020--2024}{Senior ML Engineer}{Acme}{Berlin}{}{Built Python pipelines cutting fraud losses by 12\\%.}",
-		"\\section{Skills}",
+describe("prep HTML-aware probeable claims", () => {
+	const HTML_CV = [
+		"<h2>Senior ML Engineer at Acme, Berlin (2020-2024)</h2>",
+		"<p>Built Python pipelines cutting fraud losses by 12%.</p>",
+		"<h2>Skills</h2>",
 	].join("\n");
 
 	it("strips markup before line-splitting", () => {
-		const prose = stripTexToProse(TEX_CV);
-		assert.ok(!prose.includes("\\cventry"), "command stripped");
-		assert.ok(!prose.includes("{") && !prose.includes("}"), "braces dropped");
+		const prose = stripHtmlToProse(HTML_CV);
+		assert.ok(!prose.includes("<") && !prose.includes(">"), "tags stripped");
 		assert.ok(prose.includes("12"), "digits survive for the quantified pass");
 	});
 
 	it("emits no markup-bearing claims from a generated CV", () => {
-		const plan = planInterviewPrep({ ...BASE, cvText: TEX_CV });
+		const plan = planInterviewPrep({ ...BASE, cvText: HTML_CV });
 		assert.ok(plan.probeableClaims.length > 0, "expected the quantified claim to surface");
 		for (const claim of plan.probeableClaims) {
-			assert.ok(!claim.includes("\\"), `markup leaked into claim: ${claim}`);
-			assert.ok(!claim.includes("{") && !claim.includes("}"), `braces leaked into claim: ${claim}`);
-			assert.ok(!claim.includes("cventry"), `command leaked into claim: ${claim}`);
+			assert.ok(!claim.includes("<") && !claim.includes(">"), `markup leaked into claim: ${claim}`);
 		}
 		assert.ok(
 			plan.probeableClaims.some((claim) => claim.includes("12")),

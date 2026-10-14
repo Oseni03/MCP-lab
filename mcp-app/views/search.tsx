@@ -1,5 +1,5 @@
 import type { DashboardData, DashboardItem, ToolAction } from "../types.ts";
-import { list, num, rec, strings, text } from "../toolviews.ts";
+import { list, rec, strings, text } from "../toolviews.ts";
 import { Badge } from "../components/ui/badge.tsx";
 import { Button } from "../components/ui/button.tsx";
 import { ActionBar, AppShell, BulletList, DetailsCard, Hero, Notice, Section } from "./_shared.tsx";
@@ -70,9 +70,8 @@ export function SearchView(props: SearchViewProps): React.JSX.Element {
 			badge={<Badge>{candidates.length} candidates</Badge>}
 			meta={
 				<>
-					{text(filters["location"]) !== "" ? `${text(filters["location"])} · ` : ""}seen skipped{" "}
-					{num(details["seenSkipped"]) ?? 0} · applied skipped {num(details["appliedSkipped"]) ?? 0}
-					{queriesRun.length > 0 ? ` · Ran: ${queriesRun.join("; ")}` : ""}
+					{text(filters["location"]) !== "" ? `${text(filters["location"])} · ` : ""}
+					{queriesRun.length > 0 ? `Ran: ${queriesRun.join("; ")}` : ""}
 				</>
 			}
 		/>

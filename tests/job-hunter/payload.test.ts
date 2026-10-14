@@ -173,42 +173,4 @@ describe("planRank caller payload (issue 14)", () => {
 	});
 });
 
-// Issue 14: delta-only seenKeys set semantics with a documented failure mode.
-describe("delta seenKeys (issue 14)", () => {
-	it("excludes sent keys while the host owns the full store", async () => {
-		const { planSearch } = await import("@/lib/job-hunter/search.ts");
-		const profile = {
-			name: "Test Candidate",
-			location: "Berlin, Germany",
-			workCountry: "Germany",
-			permitClasses: [],
-			languages: [{ language: "English", level: "C1" }],
-			preferences: { targetRoles: [] },
-		skills: [{ name: "Python", category: "primary" as const }],
-			energizingTasks: [],
-			drainingTasks: [],
-		};
-		const results = [
-			{ title: "A", company: "Acme", url: "https://example.com/a", description: "Python role with detail.", postedDate: "2026-09-20" },
-			{ title: "B", company: "Acme", url: "https://example.com/b", description: "Python role with detail.", postedDate: "2026-09-20" },
-		];
-		const first = await planSearch({
-			profile,
-			scraperAdapters: ["test"],
-			scraperFetch: async () => results,
-			now: new Date("2026-09-29T00:00:00Z"),
-		});
-		assert.equal(first.candidates.length, 2);
-		// Host sends only the new key since the last call (delta); the old
-		// exclusion holds because the host filtered its side of the store.
-		const delta = await planSearch({
-			profile,
-			scraperAdapters: ["test"],
-			scraperFetch: async () => [results[1]],
-			seenKeys: [first.candidates[0].key],
-			now: new Date("2026-09-29T00:00:00Z"),
-		});
-		assert.equal(delta.candidates.length, 1);
-		assert.equal(delta.seenSkipped, 0, "delta keys not present are not skipped");
-	});
-});
+

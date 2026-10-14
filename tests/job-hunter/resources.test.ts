@@ -199,7 +199,7 @@ describe("workflow prompts (ticket 11)", () => {
 			"grounding audit",
 			"Part A",
 			"Part B",
-			"compile",
+			"render",
 			"text-layer",
 			"keyword",
 			"verification",
@@ -276,7 +276,7 @@ describe("workflow prompts (ticket 11)", () => {
 		const flow = getPrompt("tailor-flow");
 		assert.equal(flow.ok, true);
 		for (const step of [
-			"template override",
+			"override",
 			"structural reference",
 			"section",
 			"page budget",

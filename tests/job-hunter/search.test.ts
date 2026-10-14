@@ -6,7 +6,6 @@ import {
 	SEARCH_RECENCY_DAYS,
 	buildAutoQueries,
 	capLimit,
-	dedupeCandidates,
 	isPeopleSearchUrl,
 	planSearch,
 	resolveSearchFilters,
@@ -139,38 +138,6 @@ describe("planSearch", () => {
 		});
 		assert.equal(plan.candidates.length, 1);
 		assert.equal(plan.candidates[0].status, "expired");
-	});
-
-	it("dedupes caller-passed seen keys and applied pairs without owning state", async () => {
-		const first = await planSearch({
-			profile: PROFILE,
-			scraperAdapters: ["test"],
-			scraperFetch: async () => [posting()],
-			now: new Date("2026-09-29T00:00:00Z"),
-		});
-		const key = first.candidates[0].key;
-		const plan = await planSearch({
-			profile: PROFILE,
-			scraperAdapters: ["test"],
-			scraperFetch: async () => [posting(), posting({ title: "Other Role", url: "https://example.com/jobs/2" })],
-			seenKeys: [key],
-			appliedPairs: ["acme||other role"],
-			now: new Date("2026-09-29T00:00:00Z"),
-		});
-		assert.deepEqual(plan.candidates, []);
-		assert.equal(plan.seenSkipped, 1);
-		assert.equal(plan.appliedSkipped, 1);
-	});
-
-	it("dedupeCandidates flags duplicates with the stable key", () => {
-		const key = "acme_ml-engineer";
-		const result = dedupeCandidates(
-			[{ key, company: "Acme", title: "ML Engineer" }],
-			[key],
-			[],
-		);
-		assert.equal(result.kept.length, 0);
-		assert.equal(result.seenSkipped, 1);
 	});
 
 	it("overrides quick-fit on a language-gate FAIL and flags without veto", async () => {

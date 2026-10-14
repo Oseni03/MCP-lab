@@ -19,8 +19,9 @@ export const adapters: Adapter[] = [
   myjobmag,
 ];
 
-export async function searchAll(q: SearchQuery): Promise<Job[]> {
-  const results = await Promise.allSettled(adapters.map((adapter) => adapter.search(q)));
+export async function searchAll(q: SearchQuery, options: SearchAllOptions = {}): Promise<Job[]> {
+  const sources = options.adapters ?? adapters;
+  const results = await Promise.allSettled(sources.map((adapter) => adapter.search(q)));
 
   const jobs = results.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
   const filtered = jobs.filter((job) => jobMatchesQuery(job, q));

@@ -230,7 +230,7 @@ const RESOURCES: ResourceBody[] = [
 		text: [
 			"# Seen-keys pointer (server default v1)",
 			"",
-			"- The host owns seen_jobs.json; tools accept caller-passed seenKeys[] and return stability-ready keys plus seenSkipped counts.",
+			"- The host owns seen_jobs.json; tools return stability-ready keys.",
 			"- This resource carries identifiers and counts only, never full backlog contents (state-through-tool invariant).",
 			"- Missing store degrades to an explicit message; nothing is guessed.",
 		].join("\n"),

@@ -206,8 +206,8 @@ describe("companySpecifics provenance", () => {
 		for (const claim of fetched) {
 			const quoted = claim.text.trim().replace(/[.]+$/, "");
 			assert.ok(
-				result.html.includes(`"${quoted}" (${claim.sourceUrl})`),
-				"quote-and-link phrasing cites each fetched sentence",
+				result.html.includes(`&quot;${quoted}&quot; (${claim.sourceUrl})`),
+				"quote-and-link phrasing cites each fetched sentence (HTML-escaped)",
 			);
 		}
 	});

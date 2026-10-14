@@ -221,8 +221,6 @@ function mapSearch(_args: Rec, structured: Rec, markdown?: string): DashboardDat
 		summary: [
 			keywords !== "" ? `"${keywords}"` : "auto queries",
 			`${candidates.length} candidates`,
-			`seen skipped ${num(structured["seenSkipped"]) ?? 0}`,
-			`applied skipped ${num(structured["appliedSkipped"]) ?? 0}`,
 		].join(" · "),
 		items: candidates.map((entry) => {
 			const candidate = rec(entry);

@@ -12,8 +12,6 @@ function structuredWith(candidates: unknown[]): Record<string, unknown> {
 		queries: [],
 		candidates,
 		staleCount: 0,
-		seenSkipped: 0,
-		appliedSkipped: 0,
 		queriesRun: ["backend"],
 		nextCursor: null,
 		notes: [],

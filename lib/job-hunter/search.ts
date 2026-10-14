@@ -230,6 +230,14 @@ export interface SearchInput {
 	profile: Profile;
 	now?: Date;
 	/**
+	 * Local scraper adapters to run (registry names from the sources
+	 * command, or "all"). Undefined or empty means no fetch runs.
+	 * Internal-only test seam: the MCP tool always passes ["all"].
+	 */
+	scraperAdapters?: string[];
+	/** Injected scraper fetcher; defaults to the live job-scraper library. */
+	scraperFetch?: PostingFetcher;
+	/**
 	 * Opaque resume token from a previous page (issue 14). The server holds
 	 * no state: the cursor is an offset into the relevance-ordered list and
 	 * the caller holds everything else.
@@ -248,35 +256,6 @@ export interface SearchPlan {
 	nextCursor: string | null;
 	notes: string[];
 	errors: string[];
-}
-
-function appliedKey(company: string, title: string): string {
-	return `${company.trim().toLowerCase()}||${title.trim().toLowerCase()}`;
-}
-
-/** Caller-passed dedupe: seen keys plus applied company/title pairs. Host owns the store. */
-export function dedupeCandidates<T extends { key: string; company: string; title: string }>(
-	items: T[],
-	seenKeys: string[],
-	appliedPairs: string[],
-): { kept: T[]; seenSkipped: number; appliedSkipped: number } {
-	const seen = new Set(seenKeys);
-	const applied = new Set(appliedPairs.map((pair) => pair.trim().toLowerCase()));
-	const kept: T[] = [];
-	let seenSkipped = 0;
-	let appliedSkipped = 0;
-	for (const item of items) {
-		if (seen.has(item.key)) {
-			seenSkipped += 1;
-			continue;
-		}
-		if (applied.has(appliedKey(item.company, item.title))) {
-			appliedSkipped += 1;
-			continue;
-		}
-		kept.push(item);
-	}
-	return { kept, seenSkipped, appliedSkipped };
 }
 
 function daysBetween(from: string, to: string): number {
@@ -383,38 +362,48 @@ export async function planSearch(input: SearchInput): Promise<SearchPlan> {
 		return [...seen.values()];
 	}
 
-	// Local scrapers (no key, host network): every query in the set runs
-	// with the plan's location, workplace filter, recency window, and
-	// limit, merged across queries with dedupe by URL. Site clients
-	// report per-call meta through the collector below; a throwing
-	// fetch degrades per query into errors[] with zero inventions.
-	const siteMetas: ScrapeMeta[] = [];
-	const scraperFetch = createScraperFetcher(
-		{
-			location: filters.location,
-			remoteMode: filters.remoteMode,
-			limit: filters.limit,
-			country: resolveSiteCountry(input.profile.workCountry),
-		},
-		(meta) => {
-			siteMetas.push(meta);
-		},
-	);
-	const collected: RawPosting[][] = [];
-	for (const query of querySet) {
-		try {
-			collected.push(await scraperFetch(query));
-			queriesRun.push(query);
-		} catch (error) {
-			errors.push(`Scraper fetch failed for "${query}" (${String(error)}); no postings invented.`);
+	if (input.scraperAdapters && input.scraperAdapters.length > 0) {
+		// Local scrapers (no key, host network): every query in the set runs
+		// with the plan's location, workplace filter, recency window, and
+		// limit, merged across queries with dedupe by URL. Site clients
+		// report per-call meta through the collector below; a throwing
+		// fetch degrades per query into errors[] with zero inventions.
+		const siteMetas: ScrapeMeta[] = [];
+		const scraperFetch =
+			input.scraperFetch ??
+			createScraperFetcher(
+				{
+					location: filters.location,
+					remoteMode: filters.remoteMode,
+					limit: filters.limit,
+					adapters: input.scraperAdapters,
+					country: resolveSiteCountry(input.profile.workCountry),
+				},
+				undefined,
+				(meta) => {
+					siteMetas.push(meta);
+				},
+			);
+		const collected: RawPosting[][] = [];
+		for (const query of querySet) {
+			try {
+				collected.push(await scraperFetch(query));
+				queriesRun.push(query);
+			} catch (error) {
+				errors.push(`Scraper fetch failed for "${query}" (${String(error)}); no postings invented.`);
+			}
 		}
-	}
-	raws = mergeRaws(collected);
-	notes.push(`Scraper run over "all"; merged across ${queriesRun.length} querie(s).`);
-	for (const meta of siteMetas) {
-		const summary = summarizeScrapeMeta(meta);
-		notes.push(...summary.notes);
-		errors.push(...summary.errors);
+		raws = mergeRaws(collected);
+		notes.push(`Scraper run over ${input.scraperAdapters.join(", ")}; merged across ${queriesRun.length} querie(s).`);
+		for (const meta of siteMetas) {
+			const summary = summarizeScrapeMeta(meta);
+			notes.push(...summary.notes);
+			errors.push(...summary.errors);
+		}
+	} else {
+		errors.push(
+			"No search source available (no scraper adapters); no postings invented.",
+		);
 	}
 
 	const candidates: SearchCandidate[] = [];
@@ -553,10 +542,36 @@ export async function planSearch(input: SearchInput): Promise<SearchPlan> {
 	};
 }
 
+/**
+ * Local scraper runner over the job-scraper library (no key, host network).
+ * "all" fans out to every registered adapter; otherwise the named adapters
+ * run (unknown names throw, recorded per query). Kept injectable so unit
+ * tests never touch the network.
+ */
+export type ScraperRunner = (query: ScraperQuery) => Promise<ScrapedJob[]>;
+
+function defaultScraperRunner(adapterNames: string[]): ScraperRunner {
+	return (query) => {
+		if (adapterNames.includes("all")) {
+			return searchScrapers(query);
+		}
+		const resolved = adapterNames.map((name) => {
+			const found = scraperRegistry.find((candidate) => candidate.name === name);
+			if (!found) {
+				const known = scraperRegistry.map((candidate) => candidate.name).join(", ");
+				throw new Error(`Unknown scraper adapter '${name}'. Registered: ${known}`);
+			}
+			return found;
+		});
+		return searchScrapers(query, { adapters: resolved });
+	};
+}
+
 export interface ScraperFetchOptions {
 	location: string;
 	remoteMode?: RemoteMode;
 	limit: number;
+	adapters: string[];
 	/** ts-jobspy country override; absent falls back inside the Site client. */
 	country?: string;
 }
@@ -571,10 +586,11 @@ export interface ScraperFetchOptions {
  */
 export function createScraperFetcher(
 	options: ScraperFetchOptions,
+	run: ScraperRunner = defaultScraperRunner(options.adapters),
 	onSiteMeta?: (meta: ScrapeMeta) => void,
 ): PostingFetcher {
 	return async (query: string) => {
-		const jobs = await searchScrapers({
+		const jobs = await run({
 			keywords: query,
 			location: options.location,
 			remoteFilter: options.remoteMode,
@@ -582,7 +598,7 @@ export function createScraperFetcher(
 			limit: options.limit,
 			...(options.country !== undefined ? { country: options.country } : {}),
 			...(onSiteMeta !== undefined ? { metaSink: (meta: ScrapeMeta) => onSiteMeta(meta) } : {}),
-		})
+		});
 		return jobs.map((job) => ({
 			title: job.title,
 			company: job.company,

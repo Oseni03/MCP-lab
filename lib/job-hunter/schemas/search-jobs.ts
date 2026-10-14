@@ -83,8 +83,6 @@ export const SearchJobsOutput = z
 		),
 		candidates: z.array(SearchCandidateSchema),
 		staleCount: z.number(),
-		seenSkipped: z.number(),
-		appliedSkipped: z.number(),
 		queriesRun: z.array(z.string()),
 		nextCursor: z.string().nullable(),
 		notes: z.array(z.string()),

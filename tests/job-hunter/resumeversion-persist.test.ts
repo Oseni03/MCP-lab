@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import {
 	EMPTY_HTML_ERROR,
 	EMPTY_VERSION_KEY_ERROR,
-	buildResumeVersionRecord,
 	fetchLatestResumeVersion,
 	fetchResumeVersions,
 	saveResumeVersion,
@@ -20,46 +19,20 @@ describe("resumeversion persistence (ticket 02)", () => {
 		assert.ok(markdown.includes("Cut losses by 12"));
 	});
 
-	it("builds a byte-identical storable record", () => {
-		const built = buildResumeVersionRecord({
-			userId: "local:test",
-			jobKey: "acme_senior-ml-engineer",
-			html: HTML,
-			verification: { compiles: true, keywordOverlap: 0.5, noNewEmployers: true },
-		});
-		assert.equal(built.ok, true);
-		if (!built.ok) return;
-		assert.equal(built.record.html, HTML);
-		assert.equal(built.record.userId, "local:test");
-		assert.equal(built.record.jobKey, "acme_senior-ml-engineer");
-		assert.ok(built.record.markdown.includes("Cut losses by 12"));
-		assert.deepEqual(built.record.verification, {
-			compiles: true,
-			keywordOverlap: 0.5,
-			noNewEmployers: true,
-		});
+	it("fails loudly on empty source", async () => {
+		const result = await saveResumeVersion(null, { userId: "u", jobKey: "k", html: "  \n " });
+		assert.equal(result.persisted, false);
+		assert.ok(result.reason.includes(EMPTY_HTML_ERROR));
 	});
 
-	it("fails loudly on empty source with no record", () => {
-		const built = buildResumeVersionRecord({ userId: "u", jobKey: "k", html: "  \n " });
-		assert.equal(built.ok, false);
-		if (built.ok) return;
-		assert.equal(built.error, EMPTY_HTML_ERROR);
-		assert.ok(!("record" in built));
-	});
-
-	it("fails loudly on empty user or key with no record", () => {
-		const built = buildResumeVersionRecord({ userId: " ", jobKey: "k", html: HTML });
-		assert.equal(built.ok, false);
-		if (built.ok) return;
-		assert.equal(built.error, EMPTY_VERSION_KEY_ERROR);
+	it("fails loudly on empty user or key", async () => {
+		const result = await saveResumeVersion(null, { userId: " ", jobKey: "k", html: HTML });
+		assert.equal(result.persisted, false);
+		assert.ok(result.reason.includes(EMPTY_VERSION_KEY_ERROR));
 	});
 
 	it("degrades gracefully without a database", async () => {
-		const built = buildResumeVersionRecord({ userId: "u", jobKey: "k", html: HTML });
-		assert.equal(built.ok, true);
-		if (!built.ok) return;
-		assert.deepEqual(await saveResumeVersion(null, built.record), {
+		assert.deepEqual(await saveResumeVersion(null, { userId: "u", jobKey: "k", html: HTML }), {
 			persisted: false,
 			reason: "no-database",
 		});
