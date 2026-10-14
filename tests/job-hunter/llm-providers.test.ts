@@ -144,6 +144,27 @@ describe("refineEvaluation", () => {
 		assert.equal(outcome.source, "heuristic");
 		assert.equal(called, false);
 	});
+
+	it("skips providers when the profile carries no scoring signal", async () => {
+		const base = evaluateJob({ postingText: POSTING, profile: DEFAULT_PROFILE });
+		assert.equal(base.scored, false);
+		let called = false;
+		const outcome = await refineEvaluation(base, POSTING, DEFAULT_PROFILE, {
+			samplingSender: async () => {
+				called = true;
+				return {};
+			},
+			groqApiKey: "key-1",
+			fetchImpl: async () => {
+				called = true;
+				return { status: 200, body: "{}" };
+			},
+		});
+		assert.equal(outcome.source, "heuristic");
+		assert.equal(called, false);
+		assert.equal(outcome.evaluation.scored, false);
+		assert.equal(outcome.evaluation.overallScore, null);
+	});
 });
 
 describe("groqTailor", () => {

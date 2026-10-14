@@ -12,6 +12,7 @@ import {
 } from "@/lib/job-hunter/search.ts";
 import type { RawPosting } from "@/lib/job-hunter/search.ts";
 import type { Profile } from "@/lib/job-hunter/profile.ts";
+import { DEFAULT_PROFILE } from "@/lib/job-hunter/profile.ts";
 
 const PROFILE: Profile = {
 	name: "Test Candidate",
@@ -211,6 +212,21 @@ describe("planSearch", () => {
 			(plan.candidates[0].consolidationNote ?? "").includes("2"),
 			"expected a mass-posting consolidation note",
 		);
+	});
+
+	it("withholds the band when the profile carries no signal instead of asserting medium", async () => {
+		const plan = await planSearch({
+			profile: DEFAULT_PROFILE,
+			filters: { keywords: "ML Engineer" },
+			scraperAdapters: ["test"],
+			scraperFetch: async () => [posting()],
+			now: new Date("2026-09-29T00:00:00Z"),
+		});
+		assert.equal(plan.candidates.length, 1);
+		const fit = plan.candidates[0].quickFit;
+		assert.equal(fit.band, "unscored");
+		assert.deepEqual(plan.candidates[0].referralLinks, []);
+		assert.match(plan.candidates[0].language.note, /not set up yet/i);
 	});
 
 	it("strips URL fragments so keys stay stable", async () => {

@@ -50,6 +50,13 @@ const LANG_PROFILE = {
 	...DEFAULT_PROFILE,
 	name: "Test Candidate",
 	languages: [{ language: "English", level: "C1" }],
+	// Scoring signal so these tests exercise thin probe text, not an empty
+	// profile (which withholds the band on its own).
+	skills: [{ name: "Python", category: "primary" as const }, { name: "SQL", category: "primary" as const }],
+	domains: [{ name: "fraud detection", category: "strong" as const }],
+	preferences: { targetRoles: ["ML Engineer"] },
+	energizingTasks: ["model building"],
+	drainingTasks: [],
 };
 
 // Issue 12 slice C: negative-context guard rides the matching work.

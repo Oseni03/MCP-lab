@@ -106,6 +106,21 @@ describe("mergeRefinement", () => {
 		assert.equal(merged.shouldCallEmployer.suggest, true);
 	});
 
+	it("keeps an unscored base unscored when the profile carries no signal", () => {
+		const base = evaluateJob({ postingText: POSTING, profile: DEFAULT_PROFILE, source: "test" });
+		assert.equal(base.scored, false);
+		const merged = mergeRefinement(base, POSTING, DEFAULT_PROFILE, {
+			dimensions: [{ dimension: "technical", score: 95, reason: "looks strong" }],
+			strengths: ["everything"],
+			gaps: [],
+			recommendation: "Apply immediately.",
+		});
+		assert.equal(merged.scored, false);
+		assert.equal(merged.overallScore, null);
+		assert.equal(merged.verdict, null);
+		assert.deepEqual(merged.dimensions, []);
+	});
+
 	it("rescores from scratch when the LLM overturns a gate FAIL", () => {
 		const failed = evaluateJob({
 			postingText: "Applicants must be citizens of Denmark. Python role.",

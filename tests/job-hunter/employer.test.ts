@@ -128,4 +128,20 @@ describe("evaluateJob", () => {
 		assert.equal(result.scored, true);
 		assert.equal(result.languageGate.verdict, "FLAG");
 	});
+
+	it("withholds the score when the profile carries no signal instead of inventing 50s", () => {
+		for (const postingText of [
+			"Senior ML Engineer at Acme. Requirements: Python, SQL. Domain: fraud detection.",
+			"Junior Baker at Flour Co. Requirements: sourdough, early mornings.",
+		]) {
+			const result = evaluateJob({ postingText, profile: DEFAULT_PROFILE });
+			assert.equal(result.scored, false);
+			assert.equal(result.overallScore, null);
+			assert.equal(result.verdict, null);
+			assert.deepEqual(result.dimensions, []);
+			assert.deepEqual(result.strengths, []);
+			assert.deepEqual(result.gaps, []);
+			assert.match(result.recommendation, /not set up yet/i);
+		}
+	});
 });

@@ -12,6 +12,7 @@ import {
 	extractStrengths,
 	overallScore,
 	parsePostingDay,
+	profileHasScoringSignal,
 	scoreDimensions,
 } from "@/lib/job-hunter/evaluate.ts";
 import { isCanonical, makeKey } from "@/lib/job-key.ts";
@@ -438,6 +439,15 @@ export async function planSearch(input: SearchInput): Promise<SearchPlan> {
 		const score = overallScore(dims);
 		const languageGate = checkLanguage(probeText, input.profile);
 		const resolved = resolveBand(score, languageGate, lowEvidence, textLength);
+		// No profile signal (skills, domains, tasks, or targets): every
+		// dimension falls back to 50, so asserting a band would invent a
+		// fit. Withhold it like thin evidence instead — same unscored band,
+		// no fabricated gaps, no referral links.
+		const hasSignal = profileHasScoringSignal(input.profile);
+		const band = hasSignal ? resolved.band : "unscored";
+		const languageNote = hasSignal
+			? resolved.languageNote
+			: `Unscored — profile not set up yet; add skills, domains, and target roles via setup-profile for real scores. ${languageGate.note}`;
 		candidates.push({
 			key,
 			title,
@@ -450,15 +460,15 @@ export async function planSearch(input: SearchInput): Promise<SearchPlan> {
 			portal: raw.portal ?? "linkedin",
 			quickFit: {
 				score,
-				band: resolved.band,
-				strengths: extractStrengths(probeText, input.profile),
-				gaps: extractGaps(probeText, input.profile),
+				band,
+				strengths: hasSignal ? extractStrengths(probeText, input.profile) : [],
+				gaps: hasSignal ? extractGaps(probeText, input.profile) : [],
 				lowEvidence,
 				textLength,
 			},
-			language: { verdict: languageGate.verdict, note: resolved.languageNote },
+			language: { verdict: languageGate.verdict, note: languageNote },
 			consolidationNote: null,
-			referralLinks: resolved.band === "high" || resolved.band === "medium" ? referralLinksFor(company) : [],
+			referralLinks: band === "high" || band === "medium" ? referralLinksFor(company) : [],
 			// Unknown employers stay flagged for host verification before evaluating.
 			needsVerification: company === "Unknown company",
 			// Display fields for the interactive job cards: excerpt, location,

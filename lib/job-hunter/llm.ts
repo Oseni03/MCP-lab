@@ -7,6 +7,7 @@ import {
 	extractStrengths,
 	finalizeRecommendation,
 	overallScore,
+	profileHasScoringSignal,
 	recommendationFor,
 	scoreDimensions,
 	verdictFor,
@@ -192,6 +193,13 @@ export function mergeRefinement(
 		};
 	}
 
+	if (!profileHasScoringSignal(profile)) {
+		// No scoring signal: the base is unscored by construction and score
+		// math over an empty profile would fabricate 50s, so keep it as-is
+		// (gates already merged above).
+		return { ...base, eligibility, languageGate };
+	}
+
 	const dimensions = base.scored ? base.dimensions.map((d) => ({ ...d })) : scoreDimensions(postingText, profile);
 	if (fix.dimensions) {
 		for (const refinedDim of fix.dimensions) {
@@ -344,7 +352,15 @@ export async function refineEvaluation(
 ): Promise<RefineOutcome> {
 	if (options.mode === "off") {
 		return { evaluation: base, source: "heuristic", model: null, note: "LLM refinement disabled by caller." };
-	 }
+	}
+	if (!profileHasScoringSignal(profile)) {
+		return {
+			evaluation: base,
+			source: "heuristic",
+			model: null,
+			note: "Skipped LLM refinement: the profile carries no scoring signal, so the evaluation stays unscored.",
+		};
+	}
 	const prompt = buildRefinePrompt(postingText, profile, base);
 	const failures: string[] = [];
 

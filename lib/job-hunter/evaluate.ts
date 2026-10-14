@@ -457,6 +457,28 @@ export function contentWords(text: string): Set<string> {
 	);
 }
 
+/**
+ * True when the profile carries anything to score against: skills, domains,
+ * behavioral tasks, or career targets. Without any of these every dimension
+ * falls back to 50 and all postings score an identical, invented 50 — so
+ * callers must withhold the score instead (see evaluateJob).
+ */
+export function profileHasScoringSignal(profile: Profile): boolean {
+	return (
+		primarySkillNames(profile).some((s) => s.trim() !== "") ||
+		secondarySkillNames(profile).some((s) => s.trim() !== "") ||
+		strongDomainNames(profile).some((d) => d.trim() !== "") ||
+		adjacentDomainNames(profile).some((d) => d.trim() !== "") ||
+		profile.energizingTasks.some((t) => t.trim() !== "") ||
+		profile.drainingTasks.some((t) => t.trim() !== "") ||
+		careerTargetNames(profile).some((g) => g.trim() !== "")
+	);
+}
+
+/** Recommendation when scoring is withheld for lack of profile signal. */
+export const UNSET_PROFILE_RECOMMENDATION =
+	"Profile not set up yet: add skills, domains, and target roles via setup-profile, then re-run — any score without them would be invented.";
+
 /** Fraction of phrases present in the posting, full weight for primary, half for secondary. */
 function coverage(posting: string, primary: string[], secondary: string[]): number | null {
 	const primaryHits = primary.filter((p) => p !== "" && phraseMatches(posting, p));
@@ -909,6 +931,19 @@ export function evaluateJob(input: {
 			strengths: [],
 			gaps: [],
 			recommendation: `Do not apply: gate failed (${failed.quote ?? failed.note}).`,
+		};
+	}
+
+	if (!profileHasScoringSignal(input.profile)) {
+		return {
+			...base,
+			scored: false,
+			dimensions: [],
+			overallScore: null,
+			verdict: null,
+			strengths: [],
+			gaps: [],
+			recommendation: UNSET_PROFILE_RECOMMENDATION,
 		};
 	}
 
