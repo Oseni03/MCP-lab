@@ -239,7 +239,7 @@ function mapRank(_args: Rec, structured: Rec, markdown?: string): DashboardData 
 }
 
 function mapSearch(_args: Rec, structured: Rec, markdown?: string): DashboardData {
-	const candidates = list(structured["candidates"]);
+	const jobs = list(structured["jobs"]);
 	const filters = rec(structured["filters"]);
 	const keywords = text(filters["keywords"]);
 	const cursor = text(structured["nextCursor"]);
@@ -247,92 +247,34 @@ function mapSearch(_args: Rec, structured: Rec, markdown?: string): DashboardDat
 	// carry the original page size and filters; otherwise the cursor offset
 	// slices with a different limit and pages overlap or skip.
 	const pageLimit = num(filters["limit"]);
-	// rank-jobs requires caller-held backlog items (keys + URLs, never
-	// pasted text) and its quick-fit scores pre-order the slice. Without
-	// items the call fails validation, so only offer ranking when at least
-	// one candidate carries the required key/title/company/url. No focus
-	// text: the whole aggregated list ranks, never a keyword subset.
-	const rankItems = candidates.flatMap((entry) => {
-		const candidate = rec(entry);
-		const key = text(candidate["key"]);
-		const title = text(candidate["title"]);
-		const company = text(candidate["company"]);
-		const url = text(candidate["url"]);
-		if (key === "" || title === "" || company === "" || url === "") return [];
-		const score = num(rec(candidate["quickFit"])["score"]);
-		const portal = text(candidate["portal"]);
-		const postedDate = text(candidate["postedDate"]);
-		return [{
-			key,
-			title,
-			company,
-			url,
-			...(portal !== "" ? { portal } : {}),
-			...(postedDate !== "" ? { postedDate } : {}),
-			...(score !== undefined ? { callerQuickFit: score } : {}),
-		}];
-	});
 	return {
 		view: "search",
 		title: "Job search results",
 		summary: [
-			keywords !== "" ? `"${keywords}"` : "auto queries",
-			`${candidates.length} candidates`,
+			keywords !== "" ? `"${keywords}"` : "all",
+			`${jobs.length} jobs`,
 		].join(" · "),
-		items: candidates.map((entry) => {
-			const candidate = rec(entry);
-			const fit = rec(candidate["quickFit"]);
-			const language = rec(candidate["language"]);
-			const postingUrl = text(candidate["url"]);
-			const title = text(candidate["title"]);
-			const company = text(candidate["company"]);
-			const researchArgs = {
-				...toolArgs(candidate, "company"),
-				...(title !== "" ? { role: title } : {}),
-			};
-			const applyArgs = {
-				...toolArgs(candidate, "company"),
-				...(title !== "" ? { role: title } : {}),
-				...(postingUrl !== "" ? { postingUrl } : {}),
-			};
-			// Per-job buttons with real tool targets on this same server.
-			// Research needs company+role; Apply (analyze-job) starts the
-			// application workflow from the listing URL and never claims a
-			// submission — track-application records only after the human
-			// submits in the browser.
-			const actions: { label: string; tool: string; args?: Record<string, unknown> }[] = [];
-			if (company !== "" && title !== "") {
-				actions.push({ label: "Research job", tool: "research-job", args: researchArgs });
-			}
-			if (postingUrl !== "" || (company !== "" && title !== "")) {
-				actions.push({ label: "Apply", tool: "analyze-job", args: applyArgs });
-			}
-			const primary = actions.find((action) => action.tool === "analyze-job") ?? actions[0];
-			const postedRaw = candidate["postedDate"];
-			const requirements = strings(candidate["requirements"]);
+		items: jobs.map((entry) => {
+			const job = rec(entry);
+			const postingUrl = text(job["url"]);
+			const title = text(job["title"]);
+			const company = text(job["company"]);
+			// The thin list carries no scores or snippets; the single
+			// next step is analyze-job on the Remotive URL (Groq fit).
+			const analyze = postingUrl !== ""
+				? { label: "Analyze this job", tool: "analyze-job", args: { jobUrl: postingUrl } }
+				: undefined;
+			const postedRaw = job["postedAt"];
 			return {
 				title: title !== "" ? title : "Posting",
-				id: text(candidate["key"]) || undefined,
+				id: text(job["id"]) || undefined,
 				company: company || undefined,
-				score: num(fit["score"]),
-				verdict: text(fit["band"]) || undefined,
 				url: postingUrl || undefined,
-				description: text(candidate["snippet"]) || undefined,
-				location: text(candidate["location"]) || undefined,
-				remoteType: text(candidate["remoteType"]) || undefined,
-				employmentType: text(candidate["employmentType"]) || undefined,
-				experienceLevel: text(candidate["experienceLevel"]) || undefined,
-				salary: text(candidate["salary"]) || undefined,
-				companyLogo: text(candidate["companyLogo"]) || undefined,
-				...(requirements.length > 0 ? { requirements } : {}),
-				source: text(candidate["portal"]) || undefined,
+				location: text(job["location"]) || undefined,
+				remoteType: job["remote"] === true ? "remote" : undefined,
+				source: "remotive",
 				postedAt: typeof postedRaw === "string" && postedRaw !== "" ? postedRaw : null,
-				status: text(candidate["status"]) || undefined,
-				note:
-					[`Language ${text(language["verdict"], "?")}`, text(candidate["portal"])].filter((part) => part !== "").join(" · ") ||
-					undefined,
-				...(actions.length > 0 ? { actions } : {}),
-				...(primary ? { action: primary } : {}),
+				...(analyze ? { actions: [analyze], action: analyze } : {}),
 			};
 		}),
 		markdown,
@@ -342,14 +284,11 @@ function mapSearch(_args: Rec, structured: Rec, markdown?: string): DashboardDat
 					label: "Fetch the next page",
 					tool: "search-jobs",
 					args: {
-						...toolArgs(filters, "keywords", "location", "remoteMode", "jobType"),
+						...toolArgs(filters, "keywords", "location"),
 						...(pageLimit !== undefined ? { limit: pageLimit } : {}),
 						cursor,
 					},
 				}]
-				: []),
-			...(rankItems.length > 0
-				? [{ label: "Rank the saved candidates", tool: "rank-jobs", args: { items: rankItems } }]
 				: []),
 		],
 	};
