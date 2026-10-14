@@ -32,12 +32,7 @@ export type RemoteMode = "remote" | "hybrid" | "onsite";
 export type FitBand = "high" | "medium" | "low" | "unscored";
 export type CandidateStatus = "active" | "expired" | "unknown";
 
-/**
- * Per-run query cap (issue 13): the active source runs at most this many
- * queries per planSearch call (explicit query, or the first N auto-queries).
- * Low-volume politeness stays, but the cap is now visible via queriesRun.
- */
-export const SEARCH_QUERY_CAP = 3;
+
 
 /**
  * Probe texts shorter than this carry too little signal to assert a fit
@@ -334,19 +329,12 @@ export async function planSearch(input: SearchInput): Promise<SearchPlan> {
 	const queriesRun: string[] = [];
 
 	/**
-	 * Active query set (issue 13): the explicit query, or each auto-query up
-	 * to the per-run cap. The scraper runs the whole set, merges across
-	 * queries, and reports queriesRun.
+	 * Active query set: the explicit query, or every profile-derived
+	 * auto-query. The scraper runs the whole set and aggregates all results
+	 * into one merged list (dedupe by URL below); queriesRun reports the
+	 * full coverage bought by this call.
 	 */
-	const querySet = (filters.keywords !== "" ? [filters.keywords] : queries.map((q) => q.query)).slice(
-		0,
-		SEARCH_QUERY_CAP,
-	);
-	if (filters.keywords === "" && queries.length > SEARCH_QUERY_CAP) {
-		notes.push(
-			`Query coverage: running ${querySet.length} of ${queries.length} auto-queries (per-run cap ${SEARCH_QUERY_CAP}); re-run with explicit keywords for the rest.`,
-		);
-	}
+	const querySet = filters.keywords !== "" ? [filters.keywords] : queries.map((q) => q.query);
 
 	/** Merge helper: dedupes raw postings by normalized URL across queries. */
 	function mergeRaws(lists: RawPosting[][]): RawPosting[] {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { snippetFor } from "@/lib/job-hunter/search.ts";
 import { SearchCandidateSchema, SearchJobsOutput } from "@/lib/job-hunter/schemas/search-jobs.ts";
+import { RankJobsInput } from "@/lib/job-hunter/schemas/rank-jobs.ts";
 import { mapToolToDashboard } from "@/mcp-app/toolviews.ts";
 import type { DashboardItem } from "@/mcp-app/types.ts";
 
@@ -149,5 +150,47 @@ describe("search job cards", () => {
 	it("returns an empty item list for empty searches so the view renders its empty state", () => {
 		const data = mapToolToDashboard("search-jobs", {}, structuredWith([]), null);
 		assert.deepEqual(data.items, []);
+	});
+
+	it("passes the found candidates to rank-jobs so the button call validates", () => {
+		const data = mapToolToDashboard("search-jobs", {}, structuredWith([candidate()]), null);
+		const rank = (data.actions ?? []).find((action) => action.tool === "rank-jobs");
+		assert.ok(rank, "rank action offered");
+		assert.deepEqual(rank?.args, {
+			items: [
+				{
+					key: "acme-corp_backend-engineer",
+					title: "Backend Engineer",
+					company: "Acme Corp",
+					url: "https://example.com/jobs/1",
+					portal: "site",
+					postedDate: "2026-09-28",
+					callerQuickFit: 78,
+				},
+			],
+		});
+		assert.equal(RankJobsInput.safeParse(rank?.args).success, true);
+	});
+
+	it("preserves page filters on fetch-next-page and omits rank with no rankable candidates", () => {
+		const structured = {
+			...structuredWith([]),
+			filters: { keywords: "backend", location: "Berlin", remoteMode: "remote", limit: 20 },
+			nextCursor: "cursor-abc",
+		};
+		const data = mapToolToDashboard("search-jobs", {}, structured, null);
+		const next = (data.actions ?? []).find((action) => action.label === "Fetch the next page");
+		assert.deepEqual(next?.args, {
+			keywords: "backend",
+			location: "Berlin",
+			remoteMode: "remote",
+			limit: 20,
+			cursor: "cursor-abc",
+		});
+		assert.equal(
+			(data.actions ?? []).some((action) => action.tool === "rank-jobs"),
+			false,
+			"no rank call without backlog items",
+		);
 	});
 });

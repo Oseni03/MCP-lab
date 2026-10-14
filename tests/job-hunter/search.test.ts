@@ -170,6 +170,32 @@ describe("planSearch", () => {
 		}
 	});
 
+	it("aggregates every auto-query into one merged list", async () => {
+		const multiProfile: Profile = {
+			...PROFILE,
+			preferences: { targetRoles: ["ML Engineer", "Data Engineer", "Platform Engineer"] },
+		};
+		const seenQueries: string[] = [];
+		const plan = await planSearch({
+			profile: multiProfile,
+			scraperAdapters: ["test"],
+			scraperFetch: async (query: string) => {
+				seenQueries.push(query);
+				const slug = query.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+				return [posting({ title: `Role for ${query}`, url: `https://example.com/jobs/${slug}` })];
+			},
+			filters: { limit: 20 },
+			now: new Date("2026-09-29T00:00:00Z"),
+		});
+		assert.ok(seenQueries.length > 3, `expected more queries than the old cap of 3, ran ${seenQueries.length}`);
+		assert.deepEqual(plan.queriesRun, seenQueries);
+		assert.equal(plan.candidates.length, seenQueries.length);
+		assert.ok(
+			plan.notes.every((note) => !note.includes("Query coverage")),
+			"no partial-coverage note when every query runs",
+		);
+	});
+
 	it("consolidates mass postings with an explicit note", async () => {
 		const plan = await planSearch({
 			profile: PROFILE,

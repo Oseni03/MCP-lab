@@ -94,6 +94,28 @@ export function toolArgs(source: Rec, ...fields: string[]): Record<string, unkno
 	return args;
 }
 
+/**
+ * Args for tailor-resume / generate-cover-letter buttons. Both tools require
+ * postingText, so callers must route through here: it carries the text when
+ * the source holds it, and yields nothing usable when it does not (in which
+ * case the button must be omitted — a call without postingText always fails
+ * input validation).
+ */
+export function tailorLetterArgs(source: Rec): Record<string, unknown> {
+	return {
+		...toolArgs(source, "company", "role", "postingUrl"),
+		...(() => {
+			const postingText = text(source["postingText"]);
+			return postingText !== "" ? { postingText } : {};
+		})(),
+	};
+}
+
+/** True when the args can satisfy tailor-resume / generate-cover-letter input. */
+export function hasPostingText(source: Rec): boolean {
+	return text(source["postingText"]) !== "";
+}
+
 const DESCRIPTION_EXCERPT_LIMIT = 2000;
 
 function excerpt(value: unknown, limit: number): string | undefined {
@@ -138,11 +160,17 @@ function mapAnalysis(args: Rec, structured: Rec, markdown?: string): DashboardDa
 	const description =
 		excerpt(args["postingText"], DESCRIPTION_EXCERPT_LIMIT) ??
 		(postingUrl !== "" ? `Full posting: ${postingUrl}` : undefined);
-	const posting = toolArgs(args, "company", "role", "postingUrl");
+	// Tailor/letter buttons need the posting text (required input); the record
+	// button needs tailored files that do not exist yet at analysis time, so
+	// it is omitted here rather than offered as a call that always fails.
+	const posting = tailorLetterArgs(args);
 	const actions: ToolAction[] = [
-		{ label: "Tailor a resume for this role", tool: "tailor-resume", args: posting },
-		{ label: "Draft the cover letter", tool: "generate-cover-letter", args: posting },
-		{ label: "Record this application", tool: "track-application", args: posting },
+		...(hasPostingText(args)
+			? [
+				{ label: "Tailor a resume for this role", tool: "tailor-resume", args: posting },
+				{ label: "Draft the cover letter", tool: "generate-cover-letter", args: posting },
+			]
+			: []),
 	];
 	return {
 		view: "analysis",
@@ -215,6 +243,35 @@ function mapSearch(_args: Rec, structured: Rec, markdown?: string): DashboardDat
 	const filters = rec(structured["filters"]);
 	const keywords = text(filters["keywords"]);
 	const cursor = text(structured["nextCursor"]);
+	// Pagination resumes the same result set, so the next-page call must
+	// carry the original page size and filters; otherwise the cursor offset
+	// slices with a different limit and pages overlap or skip.
+	const pageLimit = num(filters["limit"]);
+	// rank-jobs requires caller-held backlog items (keys + URLs, never
+	// pasted text) and its quick-fit scores pre-order the slice. Without
+	// items the call fails validation, so only offer ranking when at least
+	// one candidate carries the required key/title/company/url. No focus
+	// text: the whole aggregated list ranks, never a keyword subset.
+	const rankItems = candidates.flatMap((entry) => {
+		const candidate = rec(entry);
+		const key = text(candidate["key"]);
+		const title = text(candidate["title"]);
+		const company = text(candidate["company"]);
+		const url = text(candidate["url"]);
+		if (key === "" || title === "" || company === "" || url === "") return [];
+		const score = num(rec(candidate["quickFit"])["score"]);
+		const portal = text(candidate["portal"]);
+		const postedDate = text(candidate["postedDate"]);
+		return [{
+			key,
+			title,
+			company,
+			url,
+			...(portal !== "" ? { portal } : {}),
+			...(postedDate !== "" ? { postedDate } : {}),
+			...(score !== undefined ? { callerQuickFit: score } : {}),
+		}];
+	});
 	return {
 		view: "search",
 		title: "Job search results",
@@ -281,9 +338,19 @@ function mapSearch(_args: Rec, structured: Rec, markdown?: string): DashboardDat
 		markdown,
 		actions: [
 			...(cursor !== ""
-				? [{ label: "Fetch the next page", tool: "search-jobs", args: { ...toolArgs(filters, "keywords", "location"), cursor } }]
+				? [{
+					label: "Fetch the next page",
+					tool: "search-jobs",
+					args: {
+						...toolArgs(filters, "keywords", "location", "remoteMode", "jobType"),
+						...(pageLimit !== undefined ? { limit: pageLimit } : {}),
+						cursor,
+					},
+				}]
 				: []),
-			{ label: "Rank the saved candidates", tool: "rank-jobs" },
+			...(rankItems.length > 0
+				? [{ label: "Rank the saved candidates", tool: "rank-jobs", args: { items: rankItems } }]
+				: []),
 		],
 	};
 }
@@ -315,10 +382,13 @@ function mapInterview(args: Rec, structured: Rec, markdown?: string): DashboardD
 		markdown: text(structured["packMarkdown"]) || markdown,
 		actions: [
 			{ label: "Research the company", tool: "research-company", args: toolArgs(structured, "company") },
+			// PortalFieldsInput takes no company/role keys (strict schema
+			// rejects unknown keys), and this view holds no portal fields to
+			// prefill, so the draft call goes out with defaults.
 			{
 				label: "Draft portal answers for this role",
 				tool: "draft-application-answers",
-				args: { ...toolArgs(structured, "company"), ...toolArgs(args, "role") },
+				args: {},
 			},
 		],
 	};
@@ -329,7 +399,9 @@ function mapTailoredCv(args: Rec, structured: Rec, markdown?: string): Dashboard
 	const matched = coverage.filter((entry) => rec(entry)["status"] === "matched").length;
 	const bridged = coverage.filter((entry) => rec(entry)["status"] === "bridged").length;
 	const gaps = coverage.filter((entry) => rec(entry)["status"] === "gap").length;
-	const posting = toolArgs(args, "company", "role", "postingUrl");
+	// The cover-letter button reuses the tailor call's posting text (required
+	// input). Recording needs both tailored files, which never co-exist in
+	// this view, so no record shortcut is offered.
 	return {
 		view: "cv",
 		title: `Tailored CV (${text(structured["slug"], "draft")})`,
@@ -340,15 +412,17 @@ function mapTailoredCv(args: Rec, structured: Rec, markdown?: string): Dashboard
 		items: coverageItems(coverage),
 		markdown,
 		actions: [
-			{ label: "Draft the cover letter", tool: "generate-cover-letter", args: posting },
-			{ label: "Record this application", tool: "track-application", args: posting },
+			...(hasPostingText(args)
+				? [{ label: "Draft the cover letter", tool: "generate-cover-letter", args: tailorLetterArgs(args) }]
+				: []),
 			{ label: "Prep the interview", tool: "prepare-interview", args: toolArgs(args, "company", "role") },
 		],
 	};
 }
 
 function mapCoverLetter(args: Rec, structured: Rec, markdown?: string): DashboardData {
-	const posting = toolArgs(args, "company", "role", "postingUrl");
+	// Recording needs both tailored files, which never co-exist in this
+	// view, so no record shortcut is offered.
 	return {
 		view: "letter",
 		title: `Cover letter (${text(structured["slug"], "draft")})`,
@@ -359,7 +433,6 @@ function mapCoverLetter(args: Rec, structured: Rec, markdown?: string): Dashboar
 		items: coverageItems(structured["coverage"]),
 		markdown,
 		actions: [
-			{ label: "Record this application", tool: "track-application", args: posting },
 			{ label: "Prep the interview", tool: "prepare-interview", args: toolArgs(args, "company", "role") },
 		],
 	};
@@ -411,18 +484,20 @@ function mapStrategy(_args: Rec, structured: Rec, markdown?: string): DashboardD
 			};
 		}),
 		markdown,
+		// No rank shortcut: rank-jobs requires caller-held backlog items and
+		// the strategy view holds no postings, so that call would fail input
+		// validation.
 		actions: [
 			...priorityGaps.map((gap) => ({
 				label: `Search roles closing: ${gap}`,
 				tool: "search-jobs",
 				args: { keywords: gap },
 			})),
-			{ label: "Rank saved jobs", tool: "rank-jobs" },
 		],
 	};
 }
 
-function mapFields(args: Rec, structured: Rec, markdown?: string): DashboardData {
+function mapFields(_args: Rec, structured: Rec, markdown?: string): DashboardData {
 	const intros = list(structured["selfIntros"]);
 	const projects = list(structured["projectEntries"]);
 	const pitches = list(structured["pitches"]);
@@ -450,13 +525,13 @@ function mapFields(args: Rec, structured: Rec, markdown?: string): DashboardData
 			}),
 		],
 		markdown: text(structured["copyPasteText"]) || markdown,
-		actions: [
-			{ label: "Record this application", tool: "track-application", args: toolArgs(args, "company", "role") },
-		],
+		// No record shortcut: track-application needs tailored files plus
+		// company/role, and this view holds neither.
+		actions: [],
 	};
 }
 
-function mapResearch(args: Rec, structured: Rec, markdown?: string): DashboardData {
+function mapResearch(_args: Rec, structured: Rec, markdown?: string): DashboardData {
 	const claims = list(structured["claims"]);
 	const sourcing = rec(structured["sourcing"]);
 	return {
@@ -477,10 +552,10 @@ function mapResearch(args: Rec, structured: Rec, markdown?: string): DashboardDa
 			};
 		}),
 		markdown,
-		actions: [
-			{ label: "Brief this employer as a job target", tool: "research-job", args: toolArgs(args, "company") },
-			{ label: "Draft a cover letter for this company", tool: "generate-cover-letter", args: toolArgs(args, "company") },
-		],
+		// No next-step shortcuts: research-job needs a target role and
+		// generate-cover-letter needs the posting text, and company research
+		// holds neither. Both calls would fail input validation.
+		actions: [],
 	};
 }
 
@@ -525,18 +600,14 @@ function mapJobResearch(args: Rec, structured: Rec, markdown?: string): Dashboar
 			...strings(structured["redFlags"]).map((flag) => ({ title: flag, verdict: "Verify" })),
 		],
 		markdown,
+		// Analyze runs on company+role alone (all analyze-job inputs are
+		// optional). Tailoring is omitted: tailor-resume requires the posting
+		// text and a job brief holds none, so that call would fail input
+		// validation.
 		actions: [
 			{
 				label: "Analyze this posting",
 				tool: "analyze-job",
-				args: {
-					...(company ? { company } : {}),
-					...(role ? { role } : {}),
-				},
-			},
-			{
-				label: "Tailor a resume for this role",
-				tool: "tailor-resume",
 				args: {
 					...(company ? { company } : {}),
 					...(role ? { role } : {}),
@@ -600,16 +671,14 @@ function mapFollowups(_args: Rec, structured: Rec, markdown?: string): Dashboard
 				? `${due.length} due of ${checked} checked`
 				: "Nothing due. No open application is stale or near deadline.",
 		items: due.map((entry) => {
+			// No record shortcut: track-application requires the tailored
+			// files plus company/role, and a follow-up row holds neither
+			// file, so that call would fail input validation.
 			const item = rec(entry);
 			return {
 				title: `${text(item["company"], "Company")} — ${text(item["role"], "role")}`,
 				verdict: text(item["status"]) || undefined,
 				note: `${text(item["reason"])} · Action: ${text(item["suggestedAction"])}`,
-				action: {
-					label: "Record this follow-up",
-					tool: "track-application",
-					args: toolArgs(item, "company", "role"),
-				},
 			};
 		}),
 		markdown,
