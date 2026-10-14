@@ -1,24 +1,37 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
+import { clearHttpCache } from "@/host/job-hunter/scraper/http.ts";
 import {
 	SEARCH_LIMIT_MAX,
 	capLimit,
 	planSearch,
 	resolveSearchFilters,
 } from "@/lib/job-hunter/search.ts";
-import type { RawPosting } from "@/lib/job-hunter/search.ts";
 import { encodeCursor } from "@/lib/cursor.ts";
 
-function posting(overrides: Partial<RawPosting> = {}): RawPosting {
+function apiJob(overrides: Record<string, unknown> = {}): Record<string, unknown> {
 	return {
+		id: Math.floor(Math.random() * 1_000_000),
 		title: "ML Engineer",
-		company: "Acme",
+		company_name: "Acme",
+		candidate_required_location: "Worldwide",
 		url: "https://example.com/jobs/1",
-		description: "Python and SQL for fraud detection.",
-		postedDate: "2026-09-20",
+		description: "<p>Python and SQL for fraud detection.</p>",
+		publication_date: "2026-09-20T12:00:00",
 		...overrides,
 	};
+}
+
+/** Stub the Remotive API behind the adapter; the memory cache is per-URL so it is cleared first. */
+function stubRemotive(jobs: Record<string, unknown>[]): void {
+	clearHttpCache();
+	process.env.SCRAPER_CACHE_DISABLE = "1";
+	globalThis.fetch = (async () =>
+		new Response(JSON.stringify({ jobs }), {
+			status: 200,
+			headers: { "Content-Type": "application/json" },
+		})) as typeof fetch;
 }
 
 describe("capLimit", () => {
@@ -43,26 +56,35 @@ describe("resolveSearchFilters", () => {
 });
 
 describe("planSearch (thin Remotive-only)", () => {
-	it("errors honestly when no source can run instead of fabricating postings", async () => {
-		const plan = await planSearch({});
-		assert.deepEqual(plan.jobs, []);
-		assert.ok(plan.errors.length > 0, "expected an explicit no-source error");
+	let realFetch: typeof fetch | undefined;
+	let savedCacheDisable: string | undefined;
+
+	beforeEach(() => {
+		realFetch = globalThis.fetch;
+		savedCacheDisable = process.env.SCRAPER_CACHE_DISABLE;
 	});
 
-	it("rejects non-remotive adapters in the thin contract", async () => {
-		const plan = await planSearch({
-			scraperAdapters: ["linkedin"],
-			scraperFetch: async () => [posting()],
-		});
+	afterEach(() => {
+		globalThis.fetch = realFetch as typeof fetch;
+		if (savedCacheDisable === undefined) delete process.env.SCRAPER_CACHE_DISABLE;
+		else process.env.SCRAPER_CACHE_DISABLE = savedCacheDisable;
+		clearHttpCache();
+	});
+
+	it("errors honestly on fetch failure instead of fabricating postings", async () => {
+		clearHttpCache();
+		process.env.SCRAPER_CACHE_DISABLE = "1";
+		globalThis.fetch = (async () => {
+			throw new Error("network down");
+		}) as typeof fetch;
+		const plan = await planSearch({});
 		assert.deepEqual(plan.jobs, []);
-		assert.ok(plan.errors.some((error) => error.includes("remotive")));
+		assert.ok(plan.errors.length > 0, "expected an explicit fetch error");
 	});
 
 	it("returns thin jobs without snippets or scores", async () => {
-		const plan = await planSearch({
-			scraperAdapters: ["remotive"],
-			scraperFetch: async () => [posting()],
-		});
+		stubRemotive([apiJob()]);
+		const plan = await planSearch({});
 		assert.equal(plan.jobs.length, 1);
 		const job = plan.jobs[0];
 		assert.equal(job.title, "ML Engineer");
@@ -74,33 +96,27 @@ describe("planSearch (thin Remotive-only)", () => {
 	});
 
 	it("dedupes by URL and sorts newest-first", async () => {
-		const plan = await planSearch({
-			scraperAdapters: ["remotive"],
-			scraperFetch: async () => [
-				posting({ url: "https://example.com/jobs/1", postedDate: "2026-09-20" }),
-				posting({ url: "https://example.com/jobs/1", postedDate: "2026-09-20" }),
-				posting({ url: "https://example.com/jobs/2", postedDate: "2026-09-25" }),
-			],
-		});
+		stubRemotive([
+			apiJob({ url: "https://example.com/jobs/1", publication_date: "2026-09-20T12:00:00" }),
+			apiJob({ url: "https://example.com/jobs/1", publication_date: "2026-09-20T12:00:00" }),
+			apiJob({ url: "https://example.com/jobs/2", publication_date: "2026-09-25T12:00:00" }),
+		]);
+		const plan = await planSearch({});
 		assert.equal(plan.jobs.length, 2);
 		assert.equal(plan.jobs[0].url, "https://example.com/jobs/2");
 	});
 
 	it("pages via the opaque cursor with limit as page size", async () => {
-		const raws = [1, 2, 3].map((n) =>
-			posting({ title: `Role ${n}`, url: `https://example.com/jobs/${n}` }),
+		stubRemotive(
+			[1, 2, 3].map((n) =>
+				apiJob({ id: n, title: `Role ${n}`, url: `https://example.com/jobs/${n}` }),
+			),
 		);
-		const first = await planSearch({
-			filters: { limit: 2 },
-			scraperAdapters: ["remotive"],
-			scraperFetch: async () => raws,
-		});
+		const first = await planSearch({ filters: { limit: 2 } });
 		assert.equal(first.jobs.length, 2);
 		assert.ok(first.nextCursor, "expected a resume token");
 		const second = await planSearch({
 			filters: { limit: 2 },
-			scraperAdapters: ["remotive"],
-			scraperFetch: async () => raws,
 			cursor: first.nextCursor as string,
 		});
 		assert.equal(second.jobs.length, 1);
@@ -108,52 +124,30 @@ describe("planSearch (thin Remotive-only)", () => {
 	});
 
 	it("restarts at zero with a note on an unparseable cursor", async () => {
-		const plan = await planSearch({
-			scraperAdapters: ["remotive"],
-			scraperFetch: async () => [posting()],
-			cursor: "not-a-cursor",
-		});
+		stubRemotive([apiJob()]);
+		const plan = await planSearch({ cursor: "not-a-cursor" });
 		assert.equal(plan.jobs.length, 1);
 		assert.ok(plan.notes.some((note) => note.includes("cursor")));
 	});
 
 	it("drops unresolvable URLs with an honest error", async () => {
-		const plan = await planSearch({
-			scraperAdapters: ["remotive"],
-			scraperFetch: async () => [posting({ url: "not a url" })],
-		});
+		stubRemotive([apiJob({ url: "not a url" })]);
+		const plan = await planSearch({});
 		assert.deepEqual(plan.jobs, []);
 		assert.ok(plan.errors.length > 0);
 	});
 
 	it("strips URL fragments so ids stay stable", async () => {
-		const plan = await planSearch({
-			scraperAdapters: ["remotive"],
-			scraperFetch: async () => [posting({ url: "https://example.com/jobs/1#apply" })],
-		});
+		stubRemotive([apiJob({ url: "https://example.com/jobs/1#apply" })]);
+		const plan = await planSearch({});
 		assert.equal(plan.jobs[0].url, "https://example.com/jobs/1");
 	});
 
-	it("accepts 'all' as a remotive alias", async () => {
-		const plan = await planSearch({
-			scraperAdapters: ["all"],
-			scraperFetch: async () => [posting()],
-		});
-		assert.equal(plan.jobs.length, 1);
-	});
-
 	it("encodes cursor offsets compatibly with lib/cursor", async () => {
-		const token = encodeCursor(2);
-		const plan = await planSearch({
-			filters: { limit: 1 },
-			scraperAdapters: ["remotive"],
-			scraperFetch: async () => [
-				posting({ url: "https://example.com/jobs/1" }),
-				posting({ url: "https://example.com/jobs/2" }),
-				posting({ url: "https://example.com/jobs/3" }),
-			],
-			cursor: token,
-		});
+		stubRemotive(
+			[1, 2, 3].map((n) => apiJob({ id: n, url: `https://example.com/jobs/${n}` })),
+		);
+		const plan = await planSearch({ filters: { limit: 1 }, cursor: encodeCursor(2) });
 		assert.equal(plan.jobs.length, 1);
 	});
 });

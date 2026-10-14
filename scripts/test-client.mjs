@@ -168,8 +168,6 @@ async function main() {
             keywords: "Python ML Engineer",
             location: "Berlin, Germany",
             limit: 10,
-            profile,
-            scraperAdapters: ["indeed", "linkedin"],
         },
     });
     console.log("Search", JSON.stringify(search, null, 2));

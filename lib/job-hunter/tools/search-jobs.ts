@@ -29,7 +29,6 @@ export function registerSearchJobs(server: McpServer): void {
 					location: input.location,
 					limit: input.limit,
 				},
-				scraperAdapters: ["remotive"],
 				cursor: input.cursor,
 			});
 			return {
