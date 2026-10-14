@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * Unified /scrape CLI: one entry point over every job source.
+ * Thin Remotive-only debug CLI (locked spec Q14):
+ * MCP-only product; this CLI stays for debugging only.
  *
  *   node host/job-hunter/scraper/cli.ts search --location "<place>" [flags]
- *   node host/job-hunter/scraper/cli.ts detail <id|url> [--format json|plain]
+ *   node host/job-hunter/scraper/cli.ts detail <url> [--format json|plain]
  *   node host/job-hunter/scraper/cli.ts sources [--format json|table|plain]
  *
  * Results print to stdout (JSON by default). Failures print
  * { "error": "...", "code": "..." } to stderr and exit 1.
- * LinkedIn guest access is personal-use only (see SKILL.md).
  */
 import { pathToFileURL } from "node:url";
-import { adapters, fetchLinkedInDetail, parseLinkedInJobId, searchAll, searchSource } from "./index.ts";
+import { adapters, searchAll, searchSource } from "./index.ts";
 import { clearHttpCache } from "./http.ts";
 import { fetchJobDetailText, fetchPageDetail, isEnrichable } from "./detail.ts";
 import type { Job, JobDetail, RemoteFilter, SearchQuery } from "./types.ts";
@@ -24,8 +24,6 @@ export interface SearchOptions {
 	jobageDays?: number;
 	jobageMinutes?: number;
 	remote?: RemoteFilter;
-	/** ts-jobspy country for Site searches (Indeed domain); Sites fall back when absent. */
-	country?: string;
 	page: number;
 	limit?: number;
 	source: string;
@@ -150,7 +148,7 @@ export function parseArgs(argv: string[]):
 			break;
 		}
 		case "--country":
-			options.country = readValue("--country");
+			throw new CliError("bad-args", "--country was removed with the multi-board scraper (Remotive-only now).");
 			break;
 			case "--page":
 				options.page = takePositiveInt(readValue("--page"), "--page");
@@ -186,19 +184,15 @@ function printHelpAndExit(): never {
 	const help = [
 		"Usage:",
 		'  node host/job-hunter/scraper/cli.ts search --location "<place>" [flags]',
-		"  node host/job-hunter/scraper/cli.ts detail <id|url> [--format json|plain]",
+		"  node host/job-hunter/scraper/cli.ts detail <url> [--format json|plain]",
 		"  node host/job-hunter/scraper/cli.ts sources [--format json|table|plain]",
 		"",
 		"Search flags: --location/-l (required), --query/-q, --jobage days,",
 		"  --jobage-minutes (conflicts with --jobage), --remote remote|hybrid|onsite,",
-		"  --country (Indeed domain, e.g. germany; default usa),",
-		"  --page (1-indexed, legacy adapters only), --limit/-n, --source/-s (default all,",
-		"  a Site (indeed, linkedin) or a registered adapter), --format/-f json|table|plain,",
-		"  --enrich (fetch full descriptions for snippet-only sources).",
+		"  --page (1-indexed), --limit/-n, --source/-s (default all = remotive),",
+		"  --format/-f json|table|plain, --enrich (re-fetch when description is missing).",
 		"",
-		"Date filters keep undated jobs (flagged downstream as date unknown).",
-		"Responses are cached on disk (.scratch/scrape-cache, 1h default,",
-		"details 7d) for legacy adapters only; Site searches never touch the cache.",
+		"Remotive-only debug CLI. Responses are cached on disk (.scratch/scrape-cache).",
 		"Repeat runs are instant until entries expire.",
 	].join("\n");
 	process.stdout.write(`${help}\n`);
@@ -270,7 +264,6 @@ export function toSearchQuery(options: SearchOptions): SearchQuery {
 		postedWithinMinutes: options.jobageMinutes,
 		page: options.page,
 		limit: options.limit,
-		...(options.country !== undefined ? { country: options.country } : {}),
 	};
 }
 
@@ -282,9 +275,9 @@ export async function runSearch(options: SearchOptions): Promise<Job[]> {
 }
 
 /**
- * Fill in full descriptions for snippet-only sources (linkedin, jobberman,
- * myjobmag). Bounded concurrency, failures keep the snippet, and the 7-day
- * detail cache makes repeat enrichments free.
+ * Fill in missing descriptions (Remotive search hits already carry full
+ * descriptions; re-fetch only when empty). Bounded concurrency, failures
+ * keep the existing text, and the 7-day detail cache makes repeats free.
  */
 export async function enrichJobs(jobs: Job[], concurrency = 4): Promise<void> {
 	let index = 0;
@@ -305,14 +298,6 @@ export async function enrichJobs(jobs: Job[], concurrency = 4): Promise<void> {
 }
 
 export async function runDetail(target: string): Promise<JobDetail> {
-	const linkedInId = parseLinkedInJobId(target);
-	if (linkedInId) {
-		try {
-			return await fetchLinkedInDetail(linkedInId);
-		} catch (error) {
-			throw new CliError("fetch-failed", error instanceof Error ? error.message : String(error));
-		}
-	}
 	if (/^https?:\/\//i.test(target)) {
 		try {
 			return await fetchPageDetail(target);
@@ -320,7 +305,7 @@ export async function runDetail(target: string): Promise<JobDetail> {
 			throw new CliError("fetch-failed", error instanceof Error ? error.message : String(error));
 		}
 	}
-	throw new CliError("bad-args", `Cannot parse ${JSON.stringify(target)} as a LinkedIn id or URL.`);
+	throw new CliError("bad-args", `Cannot parse ${JSON.stringify(target)} as a URL.`);
 }
 
 export async function main(argv: string[]): Promise<number> {

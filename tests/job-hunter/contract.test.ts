@@ -51,7 +51,7 @@ describe("write contracts", () => {
 
 	it("never touches the dedup store from the record path", () => {
 		const storeTouch = /seenKeys|seenSkipped|seen\.has|seen\.add|seenStore/i;
-		for (const file of ["job-hunter/record.ts", "job-hunter/tools/track-application.ts"]) {
+		for (const file of ["job-hunter/record.ts"]) {
 			const text = readFileSync(new URL(file, LIB), "utf-8");
 			assert.ok(!storeTouch.test(text), `${file} must not interact with the seen store`);
 		}

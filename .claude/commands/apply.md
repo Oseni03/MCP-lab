@@ -14,7 +14,7 @@ Orchestrates a two-agent job application workflow. The posting is `$ARGUMENTS` (
 
 ## Step 1: DRAFTER - Evaluate Fit
 
-Read `04-job-evaluation.md` + `01-candidate-profile.md`. Optional salary lookup (`node host/job-hunter/workflow/salary-lookup.ts "<Company>" --json [--city "<City>"]`; skip on error, e.g. no salary-data.json yet). Verify source host: installed portal board, official ATS apex (`greenhouse.io`, `lever.co`, `myworkdayjobs.com`/`workday.com`, `ashbyhq.com`, `smartrecruiters.com`, `workable.com` — exact or `.<apex>`, look-alikes fail closed), else `⚠ Unverified source host: <hostname>`. Present skills/experience/behavioral match, salary benchmark, overall fit + recommendation. Ask "Should I proceed with drafting the CV and cover letter for this role?" — stop on no.
+Run `analyze-job` on the Remotive URL (or pasted posting text fallback). Groq-only refinement requires `GROQ_API_KEY`; missing key is an honest stop, never a silent heuristic. Present score/verdict, strengths, gaps, and recommendation. Ask "Should I proceed with drafting the CV and cover letter for this role?" — stop on no.
 
 ## Step 2: DRAFTER - Draft CV + Cover Letter
 

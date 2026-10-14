@@ -4,6 +4,7 @@ import { jobHunterAppMeta } from "@/lib/job-hunter/ui.ts";
 
 import { loadActiveProfile } from "@/lib/job-hunter/request-profile.ts";
 import { buildCoverLetter } from "@/lib/job-hunter/tailor.ts";
+import { fetchPageDetail } from "@/host/job-hunter/scraper/detail.ts";
 import { countPdfPages, renderHtmlToPdf } from "@/lib/job-hunter/render-tailored-cover-letter.ts";
 import { documentSignals } from "@/lib/job-hunter/verify.ts";
 import { CoverInput, CoverOutput } from "@/lib/job-hunter/schemas/generate-cover-letter.ts";
@@ -27,8 +28,41 @@ export function registerGenerateCoverLetter(server: McpServer): void {
 		},
 		async (input, extra) => {
 			const profile = await loadActiveProfile(extra);
+			let postingText = input.postingText;
+			let postingUrl = input.postingUrl ?? input.jobUrl;
+			if (!postingText) {
+				if (!input.jobUrl) {
+					return {
+						isError: true,
+						content: [{ type: "text" as const, text: "Provide postingText or jobUrl." }],
+					};
+				}
+				try {
+					const detail = await fetchPageDetail(input.jobUrl);
+					postingText = detail.description;
+					postingUrl = postingUrl ?? detail.url;
+				} catch (error) {
+					return {
+						isError: true,
+						content: [
+							{
+								type: "text" as const,
+								text: `Job detail unavailable (${error instanceof Error ? error.message : String(error)}); nothing invented.`,
+							},
+						],
+					};
+				}
+				if (!postingText || postingText.trim().length === 0) {
+					return {
+						isError: true,
+						content: [{ type: "text" as const, text: "Job detail empty; nothing invented." }],
+					};
+				}
+			}
 			const result = buildCoverLetter({
 				...input,
+				postingText,
+				...(postingUrl !== undefined ? { postingUrl } : {}),
 				profile,
 			});
 			if (!result.ok) {

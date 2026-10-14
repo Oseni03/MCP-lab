@@ -24,9 +24,12 @@ describe("search-jobs tool", () => {
 		assert.equal(tools[0].name, "search-jobs");
 	});
 
-	it("no longer exposes dedupe skip counts in the output contract", () => {
+	it("exposes the thin Remotive-only output contract", () => {
 		const shape = SearchJobsOutput.shape;
-		assert.ok(!("seenSkipped" in shape), "seenSkipped removed");
-		assert.ok(!("appliedSkipped" in shape), "appliedSkipped removed");
+		assert.ok("jobs" in shape, "thin jobs list present");
+		assert.ok("nextCursor" in shape, "cursor present");
+		assert.ok(!("candidates" in shape), "old candidates removed");
+		assert.ok(!("queriesRun" in shape), "old queriesRun removed");
+		assert.ok(!("quickFit" in shape), "no scoring at top level");
 	});
 });

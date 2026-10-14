@@ -1,69 +1,37 @@
-# Search Queries for Job Scraper
+# Search Queries (Remotive-only)
 
-<!-- SETUP: Customize these queries based on your skills, target roles, and location -->
+<!-- SETUP: Customize these queries based on your skills and target roles -->
 
-## Installed portal CLIs (primary for `/scrape`)
+## Primary source
 
-/scrape runs the unified CLI first: `node host/job-hunter/scraper/cli.ts search --location "<place>"` (default source `all`; `--source <name>` narrows to a single registered adapter — see `node host/job-hunter/scraper/cli.ts sources`). You do **not** need a matching `site:` line below for CLI-covered sources to run. The `site:` templates are the **WebSearch fallback**.
+Remotive-only thin search via MCP (`search-jobs`) or debug CLI:
 
-**Language scope:** write every query category in every language in the CLAUDE.md Languages table. Translate keywords (e.g. "Frontend Developer" -> "Desarrollador Frontend"), not word-for-word.
+`node host/job-hunter/scraper/cli.ts search --location "<place>" --query "<keywords>"` (source defaults to `all` = `remotive`; `--source remotive` is the only supported narrow-down).
 
-## Search Sites
-
-- **[YOUR_JOB_BOARD]** - your market's largest general job board
-- **linkedin.com/jobs** - LinkedIn listings (filter: [YOUR_COUNTRY] / [YOUR_CITY]); also covered by `linkedin-search` CLI
-- **[YOUR_INDUSTRY_JOB_BOARD]** - niche board (optional)
-- **[YOUR_ADDITIONAL_JOB_BOARD]** - another major board (optional)
-- Company career pages via `site:` searches for known targets
+**Language scope:** write every query category in every language in the CLAUDE.md Languages table. Translate keywords, not word-for-word.
 
 ## Query Categories
 
-Organize by function, not job title. Name each priority after the function; list title variants within it.
+Organize by function, not job title. One keyword query per call; the server pages via cursor.
 
 ### Priority 1: [YOUR_PRIMARY_ROLE_TYPE]
 
 ```
-site:[YOUR_JOB_BOARD] "[YOUR_PRIMARY_JOB_TITLE_1]" [YOUR_CITY]
-site:[YOUR_JOB_BOARD] "[YOUR_PRIMARY_JOB_TITLE_2]" [YOUR_CITY]
-site:[YOUR_JOB_BOARD] "[YOUR_KEY_SKILL]" [YOUR_CITY]
-site:linkedin.com/jobs "[YOUR_PRIMARY_JOB_TITLE_1]" [YOUR_COUNTRY]
+"[YOUR_PRIMARY_JOB_TITLE_1]" [YOUR_KEY_SKILL]
+"[YOUR_PRIMARY_JOB_TITLE_2]" [YOUR_KEY_SKILL]
 ```
 
 ### Priority 2: [YOUR_DOMAIN_EXPERTISE]
 
 ```
-site:[YOUR_JOB_BOARD] [YOUR_DOMAIN_KEYWORD_1] [YOUR_CITY] OR [YOUR_REGION]
-site:[YOUR_JOB_BOARD] [YOUR_DOMAIN_KEYWORD_2] [YOUR_COUNTRY]
-site:linkedin.com/jobs [YOUR_DOMAIN_KEYWORD_1] [YOUR_CITY] [YOUR_COUNTRY]
-```
-
-### Priority 3: [YOUR_ADJACENT_ROLE_TYPE]
-
-```
-site:[YOUR_JOB_BOARD] "[YOUR_ADJACENT_TITLE_1]" [YOUR_KEY_SKILL] [YOUR_CITY]
-site:[YOUR_JOB_BOARD] "[YOUR_ADJACENT_TITLE_2]" [YOUR_KEY_SKILL] [YOUR_CITY]
-```
-
-### Priority 4: Broader Technical / Consulting
-
-```
-site:[YOUR_JOB_BOARD] [YOUR_KEY_SKILL] developer [YOUR_CITY]
-site:linkedin.com/jobs "[YOUR_KEY_SKILL] developer" [YOUR_CITY]
-site:[YOUR_JOB_BOARD] "technical consultant" [YOUR_DOMAIN] [YOUR_CITY]
+[YOUR_DOMAIN_KEYWORD_1]
+[YOUR_DOMAIN_KEYWORD_2]
 ```
 
 ## Location Filter
 
-Acceptable: [YOUR_CITY] + surroundings, [ACCEPTABLE_AREA_1], [ACCEPTABLE_AREA_2]; borderline [BORDERLINE_AREA] (~X min transit); too far [TOO_FAR_AREA].
-
-## Language Filter
-
-Apply `04-job-evaluation.md`'s Language Gate: undeclared required language = excluded; higher-level-than-declared = flagged, not excluded. Postings merely written in another language are fine.
+Client-side filter on Remotive `candidate_required_location`. Acceptable: [YOUR_CITY] + surroundings; remote roles match `remote:true` regardless.
 
 ## Date Filter
 
-Last 14 days or unexpired deadline; flag "date unknown" when undeterminable.
-
-## Adapting Queries
-
-On a focus area, use the matching category plus 2-3 custom focus queries.
+Newest-first; no server-side recency gate in the thin contract. Prefer fresh `postedAt`; flag null dates as unknown.

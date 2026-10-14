@@ -5,16 +5,8 @@ import { resolveActiveProfile } from "@/lib/job-hunter/request-profile.ts";
 import { registerAnalyzeJob } from "@/lib/job-hunter/tools/analyze-job.ts";
 import { registerTailorResume } from "@/lib/job-hunter/tools/tailor-resume.ts";
 import { registerGenerateCoverLetter } from "@/lib/job-hunter/tools/generate-cover-letter.ts";
-import { registerTrackApplication } from "@/lib/job-hunter/tools/track-application.ts";
-import { registerPrepareInterview } from "@/lib/job-hunter/tools/prepare-interview.ts";
-import { registerCareerStrategy } from "@/lib/job-hunter/tools/career-strategy.ts";
-import { registerDraftApplicationAnswers } from "@/lib/job-hunter/tools/draft-application-answers.ts";
-import { registerRankJobs } from "@/lib/job-hunter/tools/rank-jobs.ts";
-import { registerResearchCompany } from "@/lib/job-hunter/tools/research-company.ts";
-import { registerResearchJob } from "@/lib/job-hunter/tools/research-job.ts";
 import { registerSearchJobs } from "@/lib/job-hunter/tools/search-jobs.ts";
 import { registerSetupProfile } from "@/lib/job-hunter/tools/setup-profile.ts";
-import { registerDueFollowups } from "@/lib/job-hunter/tools/due-followups.ts";
 import { registerJobHunterAppResource } from "@/lib/job-hunter/ui.ts";
 import { getPrompt, getResource, listPrompts, listResources, renderProfileResource } from "@/lib/job-hunter/resources.ts";
 
@@ -27,16 +19,8 @@ export function registerJobHunterTools(server: McpServer): void {
 	registerAnalyzeJob(server);
 	registerTailorResume(server);
 	registerGenerateCoverLetter(server);
-	registerTrackApplication(server);
-	registerPrepareInterview(server);
-	registerCareerStrategy(server);
-	registerDraftApplicationAnswers(server);
-	registerRankJobs(server);
-	registerResearchCompany(server);
-	registerResearchJob(server);
 	registerSearchJobs(server);
 	registerSetupProfile(server);
-	registerDueFollowups(server);
 	registerJobHunterAppResource(server);
 }
 

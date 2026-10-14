@@ -1,32 +1,22 @@
 ---
 name: linkedin-search
-version: 2.0.0
+version: 3.0.0
 description: >
-  Use this skill whenever the user wants to search for jobs in any location or
-  market, find job listings, or look up a specific job posting — in any country,
-  city, or remotely. Trigger phrases: find a job, job search, search for jobs,
-  job openings, vacancies, hiring, positions open, remote jobs.
+  Use this skill whenever the user wants to search for jobs, find job listings,
+  or look up a specific job posting on the Remotive remote board.
+  Trigger phrases: find a job, job search, search for jobs, job openings,
+  vacancies, hiring, positions open, remote jobs.
 context: fork
 enabled: true
 allowed-tools: Bash(node host/job-hunter/scraper/cli.ts *)
 ---
 
-# LinkedIn Search Skill
+# Remotive Search Skill (Remotive-only)
 
-Search live job listings from every adapter in `host/job-hunter/scraper/` by default
-(`all`: Indeed + LinkedIn via the shared Site client, plus remote boards, HN Who is
-hiring, and Nigerian boards) via one unified CLI. Pass `--source <name>` to narrow to
-one Site or adapter (`indeed`, `linkedin`, `remotive`, `remoteok`, `wwr`, `hn`,
-`jobberman`, `myjobmag`). No authentication, no API key,
+Search live remote listings from the single Remotive adapter via one thin CLI,
+or via the `search-jobs` MCP tool (preferred). No authentication, no API key,
 zero extra runtime dependencies beyond `npm install` — runs with plain `node`.
-Location is always passed explicitly.
-
-> Country-agnostic worked example of the repo's job-portal-skill pattern. LinkedIn searches
-> globally by `--location`; Indeed additionally selects its domain by `--country`.
-
-## Personal use only
-
-Automated access is against LinkedIn's Terms of Service: **keep volume low, no commercial or bulk use.** Run on your own responsibility.
+Location is always passed explicitly (client-side filter).
 
 ## Commands
 
@@ -36,19 +26,19 @@ Automated access is against LinkedIn's Terms of Service: **keep volume low, no c
 node host/job-hunter/scraper/cli.ts search --location "<place>" [flags]
 ```
 
-Flags: `--location/-l` **required** (e.g. `"Berlin, Germany"`, `"Remote"`); `--query/-q` keyword (recommended); `--jobage` 1/7/14/30 days; `--jobage-minutes` sub-day (conflicts with `--jobage`); `--remote` remote/hybrid/onsite; `--country` Indeed domain (e.g. `germany`, default `usa`; LinkedIn ignores it); `--page` legacy adapters only; `--limit/-n` cap; `--source/-s` Site or adapter name, `all` for every source (default `all`); `--format json|table|plain` (default json); `--enrich` fetches full descriptions for snippet-only sources (Jobberman, MyJobMag).
+Flags: `--location/-l` **required**; `--query/-q` keyword (recommended, maps to Remotive `?search=`); `--jobage` days; `--jobage-minutes` sub-day (conflicts with `--jobage`); `--remote` remote/hybrid/onsite (Remotive hits are remote); `--page`; `--limit/-n` page size (default 10, max 20); `--source/-s` only `remotive` or `all` (default `all` = remotive); `--format json|table|plain` (default json); `--enrich` re-fetches when the description is missing.
 
-Date filters keep undated jobs (flag them "date unknown" downstream). Sites report honest per-Site outcomes (a blocked Site errors, never an empty result); some legacy boards ignore keyword params server-side, so matching is client-side over recent listings — niche keywords can return few results.
+Matching is server-side (`?search=`) plus client-side location filtering — niche keywords can return few results. Output is thin (no snippets, no scores); run `analyze-job` on a URL for Groq fit.
 
-Responses from legacy adapters are cached on disk (`.scratch/scrape-cache/`, gitignored): searches 30–60 min, details 7 days. Site searches never touch the disk cache. Repeat runs are instant until entries expire. Bypass with `SCRAPER_CACHE_DISABLE=1`, relocate with `SCRAPER_CACHE_DIR`.
+Responses are cached on disk (`.scratch/scrape-cache/`, gitignored). Bypass with `SCRAPER_CACHE_DISABLE=1`, relocate with `SCRAPER_CACHE_DIR`.
 
 ### Fetch full job detail
 
 ```bash
-node host/job-hunter/scraper/cli.ts detail <id|url> [--format json|plain]
+node host/job-hunter/scraper/cli.ts detail <url> [--format json|plain]
 ```
 
-Accepts numeric LinkedIn job ID, full `jobs/view/...` URL, or `urn:li:jobPosting:...` URN. Returns description, seniority, employment type, job function, industries. Non-LinkedIn URLs get best-effort page-text extraction.
+Accepts a full Remotive job URL. Returns title, company, URL, and full description text.
 
 ### List sources
 
@@ -56,9 +46,9 @@ Accepts numeric LinkedIn job ID, full `jobs/view/...` URL, or `urn:li:jobPosting
 node host/job-hunter/scraper/cli.ts sources [--format json|table|plain]
 ```
 
-Lists every registered Site and adapter; every entry runs without configuration.
+Lists the single registered adapter (`remotive`); runs without configuration.
 
 ## Notes
 
-- Sites fetch plain-text descriptions with a 14-day recency window; rich per-posting fetches stay off by default for speed.
+- MCP flow: `search-jobs` (thin list + cursor) → `analyze-job` (Groq fit) → `tailor-resume` / `generate-cover-letter`.
 - CLI retries 429/5xx with exponential backoff. Errors to stderr as `{ "error": "...", "code": "..." }`, exit 1.

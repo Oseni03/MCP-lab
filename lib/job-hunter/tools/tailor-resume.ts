@@ -5,6 +5,7 @@ import { jobHunterAppMeta } from "@/lib/job-hunter/ui.ts";
 import { prisma } from "@/lib/db.ts";
 import { sectionHeadings } from "@/lib/job-hunter/document.ts";
 import type { FetchLike } from "@/lib/job-hunter/fetch-posting.ts";
+import { fetchPageDetail } from "@/host/job-hunter/scraper/detail.ts";
 import { loadActiveProfile, userIdFromRequest } from "@/lib/job-hunter/request-profile.ts";
 import {
 	buildResumeVerification,
@@ -39,9 +40,42 @@ export function registerTailorResume(server: McpServer, options: { fetchImpl?: F
 		async (input, extra) => {
 			const started = Date.now();
 			const profile = await loadActiveProfile(extra);
+			let postingText = input.postingText;
+			let postingUrl = input.postingUrl ?? input.jobUrl;
+			if (!postingText) {
+				if (!input.jobUrl) {
+					return {
+						isError: true,
+						content: [{ type: "text" as const, text: "Provide postingText or jobUrl." }],
+					};
+				}
+				try {
+					const detail = await fetchPageDetail(input.jobUrl);
+					postingText = detail.description;
+					postingUrl = postingUrl ?? detail.url;
+				} catch (error) {
+					return {
+						isError: true,
+						content: [
+							{
+								type: "text" as const,
+								text: `Job detail unavailable (${error instanceof Error ? error.message : String(error)}); nothing invented.`,
+							},
+						],
+					};
+				}
+				if (!postingText || postingText.trim().length === 0) {
+					return {
+						isError: true,
+						content: [{ type: "text" as const, text: "Job detail empty; nothing invented." }],
+					};
+				}
+			}
 			const result = await buildTailoredCv(
 				{
 					...input,
+					postingText,
+					...(postingUrl !== undefined ? { postingUrl } : {}),
 					profile,
 				},
 				{
@@ -103,7 +137,7 @@ export function registerTailorResume(server: McpServer, options: { fetchImpl?: F
 							stretchCount: result.warnings.stretchChoices.length,
 							stored: stored.persisted,
 						}),
-						inputHash: tailorInputHash(input.postingText),
+						inputHash: tailorInputHash(postingText),
 						outputRef: stored.id !== undefined ? `resume-version:${stored.id}` : result.slug,
 					});
 				}

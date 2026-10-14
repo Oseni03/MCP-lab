@@ -1,23 +1,8 @@
 import type { Adapter, Job, JobDetail, SearchAllOptions, SearchQuery } from "./types.ts";
 import { dedupeJobs, jobMatchesQuery, sortNewestFirst } from "./helpers.ts";
 import { remotive } from "./adapters/remotive.ts";
-import { indeed, linkedin } from "./adapters/tsjobspy.ts";
-import { remoteok } from "./adapters/remoteok.ts";
-import { wwr } from "./adapters/wwr.ts";
-import { hn } from "./adapters/hn.ts";
-import { jobberman } from "./adapters/jobberman.ts";
-import { myjobmag } from "./adapters/myjobmag.ts";
 
-export const adapters: Adapter[] = [
-  indeed,
-  linkedin,
-  remotive,
-  remoteok,
-  wwr,
-  hn,
-  jobberman,
-  myjobmag,
-];
+export const adapters: Adapter[] = [remotive];
 
 export async function searchAll(q: SearchQuery, options: SearchAllOptions = {}): Promise<Job[]> {
   const sources = options.adapters ?? adapters;
@@ -41,4 +26,3 @@ export function searchSource(name: string, q: SearchQuery): Promise<Job[]> {
 
 export type { Adapter, Job, JobDetail, SearchAllOptions, SearchQuery } from "./types.ts";
 export { clearHttpCache, httpCacheStats } from "./http.ts";
-export { fetchLinkedInDetail, linkedInCanonicalUrl, parseLinkedInJobId, parseLinkedInSearch } from "./adapters/linkedin.ts";
